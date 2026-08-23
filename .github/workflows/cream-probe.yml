@@ -1,7 +1,7 @@
 name: Cream Traffic Probe -> Gist traffic.txt
 on:
   schedule:
-    - cron: '*/10 * * * *'
+    - cron: '*/5 * * * *'
   workflow_dispatch:
 
 jobs:
@@ -44,3 +44,4 @@ jobs:
             -H "Authorization: token $GHTOKEN" \
             -H "Accept: application/vnd.github+json" \
             -d "{\"files\":{\"traffic.txt\":{\"content\":\"$(cat /tmp/traffic.txt)\"}}}"
+
