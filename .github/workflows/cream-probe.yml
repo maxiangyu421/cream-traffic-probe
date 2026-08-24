@@ -1,7 +1,7 @@
 name: Cream Traffic Probe -> Gist traffic.txt
 on:
   schedule:
-    - cron: '*/5 * * * *'
+    - cron: '*/1 * * * *'
   workflow_dispatch:
 
 jobs:
