@@ -1,0 +1,51 @@
+name: Cream Login Test 2 (via residential socks5)
+on:
+  workflow_dispatch:
+
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prep
+        id: p
+        run: |
+          INFO=$(curl -sL --max-time 20 "https://gist.githubusercontent.com/maxiangyu421/89d7a13233112ddcd32863189ef2e8e4/raw/cream_account.txt")
+          EMAIL=$(echo "$INFO" | sed -n 's/.*"email" *: *"\([^"]*\)".*/\1/p')
+          echo "EMAIL=$EMAIL" >> $GITHUB_OUTPUT
+          echo "email=$EMAIL"
+      - name: Login via proxies
+        run: |
+          for HP in 98.175.31.195:4145 184.181.217.206:4145 208.102.51.6:58208 62.60.148.135:7777; do
+            echo "===== proxy $HP ====="
+            CODE=$(curl -s -m 20 --socks5-hostname "$HP" \
+              -X POST "https://api.creamapi.com/User/UserCLogin" \
+              -H "Content-Type: application/x-www-form-urlencoded" \
+              -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" \
+              -H "Referer: https://api.creamapi.com/" \
+              -H "Origin: https://api.creamapi.com" \
+              --data-urlencode "username=${{ steps.p.outputs.EMAIL }}" \
+              --data "pwd=E113CCD32D3B88DA2A373FC47B7E28EF" \
+              -o /tmp/b_$HP.txt -w "%{http_code}" ) || CODE="ERR"
+            echo "http=$CODE"
+            head -c 220 /tmp/b_$HP.txt 2>/dev/null; echo; echo
+          done
+      - name: Report
+        if: always()
+        env:
+          GHTOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
+        run: |
+          python3 - << 'PYEOF'
+          import json, urllib.request, glob, os
+          parts = []
+          for f in sorted(glob.glob("/tmp/b_*.txt")):
+              hp = os.path.basename(f)[2:-4]
+              try: body = open(f, encoding="utf-8", errors="replace").read()[:150]
+              except Exception as e: body = f"READERR {e}"
+              parts.append({"proxy": hp, "body": body})
+          content = json.dumps(parts, ensure_ascii=False)[:3500]
+          data = json.dumps({"files": {"login_result2.txt": {"content": content}}}).encode()
+          r = urllib.request.Request("https://api.github.com/gists/1c220ee72506b2b8248be179f70c9839",
+              data=data, method="PATCH",
+              headers={"Authorization": "token " + os.environ["GHTOKEN"], "Accept": "application/vnd.github+json"})
+          print(urllib.request.urlopen(r, timeout=30).status)
+          PYEOF
