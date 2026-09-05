@@ -1,0 +1,52 @@
+name: Cream Login Test (Actions egress)
+on:
+  workflow_dispatch:
+
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prep
+        id: p
+        run: |
+          INFO=$(curl -sL --max-time 20 "https://gist.githubusercontent.com/maxiangyu421/89d7a13233112ddcd32863189ef2e8e4/raw/cream_account.txt")
+          EMAIL=$(echo "$INFO" | sed -n 's/.*"email" *: *"\([^"]*\)".*/\1/p')
+          SUB=$(echo "$INFO" | sed -n 's/.*"sub_url" *: *"\([^"]*\)".*/\1/p')
+          echo "EMAIL=$EMAIL" >> $GITHUB_OUTPUT
+          echo "SUB=$SUB" >> $GITHUB_OUTPUT
+          echo "got email=$EMAIL"
+      - name: Direct sub probe
+        run: |
+          echo "== direct sub =="
+          curl -s -D /tmp/sh.txt -o /tmp/sb.txt --max-time 20 -A "ClashMeta/1.0" "${{ steps.p.outputs.SUB }}" || true
+          grep -iE "^HTTP|^subscription-userinfo" /tmp/sh.txt || true
+          head -c 150 /tmp/sb.txt; echo
+      - name: Login probe
+        run: |
+          echo "== UserCLogin =="
+          curl -s -D /tmp/h.txt -o /tmp/b.txt --max-time 25 \
+            -X POST "https://api.creamapi.com/User/UserCLogin" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" \
+            -H "Referer: https://api.creamapi.com/" \
+            -H "Origin: https://api.creamapi.com" \
+            --data-urlencode "username=${{ steps.p.outputs.EMAIL }}" \
+            --data "pwd=E113CCD32D3B88DA2A373FC47B7E28EF" || true
+          grep -iE "^HTTP|^content-type|^cf-mitigated|^server" /tmp/h.txt || true
+          echo "--- body ---"
+          head -c 400 /tmp/b.txt; echo
+      - name: Report to Gist
+        if: always()
+        env:
+          GHTOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
+        run: |
+          NOW=$(date +%s)
+          B=$(head -c 500 /tmp/b.txt 2>/dev/null | tr '\n\r' '  ' | tr -d '"' | tr -d '\\')
+          SH=$(grep -iE "^subscription-userinfo" /tmp/sh.txt 2>/dev/null | head -1 | tr -d '"' | tr -d '\\')
+          HL=$(head -1 /tmp/h.txt 2>/dev/null)
+          CT=$(grep -i "^content-type" /tmp/h.txt 2>/dev/null | head -1 | tr -d '\r')
+          CONTENT="ts=$NOW login_http=$HL $CT body=[$B] subinfo=[$SH]"
+          curl -sS --max-time 25 -X PATCH "https://api.github.com/gists/1c220ee72506b2b8248be179f70c9839" \
+            -H "Authorization: token $GHTOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -d "{\"description\":\"cream-login-test\",\"files\":{\"login_result.txt\":{\"content\":\"$CONTENT\"}}}"
