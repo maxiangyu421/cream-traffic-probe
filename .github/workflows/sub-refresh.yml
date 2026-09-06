@@ -1,0 +1,41 @@
+name: Cream Sub Refresh (clean egress)
+on:
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch clean sub and patch Gist
+        env:
+          GHTOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
+        run: |
+          set +e
+          URL=$(curl -sL --max-time 20 "https://gist.githubusercontent.com/maxiangyu421/89d7a13233112ddcd32863189ef2e8e4/raw/latest_sub_url.txt")
+          echo "SUB_URL=$URL"
+          for i in 1 2 3; do
+            curl -s -m 30 -A "ClashMeta/1.0" -o /tmp/clean.yaml "$URL"
+            SZ=$(stat -c%s /tmp/clean.yaml 2>/dev/null || echo 0)
+            echo "try$i size=$SZ"
+            if [ "$SZ" -gt 30000 ] && grep -q "^proxies:" /tmp/clean.yaml && grep -q "trojan" /tmp/clean.yaml; then
+              echo "CLEAN_OK"
+              break
+            fi
+            sleep 3
+          done
+          python3 - << 'PYEOF'
+          import json, urllib.request, os
+          body = open("/tmp/clean.yaml", "rb").read()
+          try:
+              import yaml
+              d = yaml.safe_load(body.decode("utf-8"))
+              assert d.get("proxies"), "yaml parse failed"
+              print("yaml 校验 OK, 节点数:", len(d["proxies"]))
+          except Exception as e:
+              print("YAML_INVALID", e); raise SystemExit(1)
+          data = json.dumps({"files": {"cream.yaml": {"content": body.decode("utf-8")}}}).encode()
+          req = urllib.request.Request("https://api.github.com/gists/89d7a13233112ddcd32863189ef2e8e4",
+              data=data, method="PATCH",
+              headers={"Authorization": "token " + os.environ["GHTOKEN"], "Accept": "application/vnd.github+json"})
+          print("PATCH:", urllib.request.urlopen(req, timeout=30).status)
+          PYEOF
