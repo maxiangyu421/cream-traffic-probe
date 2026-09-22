@@ -40,7 +40,7 @@ jobs:
           EXPIRE="${{ steps.probe.outputs.EXPIRE }}"
           NOW=$(date +%s)
           printf 'ts=%s download=%s total=%s expire=%s\n' "$NOW" "$DL" "$TOTAL" "$EXPIRE" > /tmp/traffic.txt
-          curl -sS --max-time 25 -X PATCH "https://api.github.com/gists/89d7a13233112ddcd32863189ef2e8e4" \
+          curl -sS --fail-with-body --max-time 25 -X PATCH "https://api.github.com/gists/89d7a13233112ddcd32863189ef2e8e4" \
             -H "Authorization: token $GHTOKEN" \
             -H "Accept: application/vnd.github+json" \
             -d "{\"files\":{\"traffic.txt\":{\"content\":\"$(cat /tmp/traffic.txt)\"}}}"
